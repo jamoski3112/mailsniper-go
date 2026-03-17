@@ -312,12 +312,6 @@ Uses EWS `ResolveNames` to map SMTP addresses to Active Directory display names.
 
 ---
 
-## Wordlist Generation
-
-A seasonal password wordlist is included at `wordlist.txt` covering common `Season+Year` patterns for 2025–2026 in multiple capitalisation and suffix variants.
-
----
-
 ## License
 
 MIT
