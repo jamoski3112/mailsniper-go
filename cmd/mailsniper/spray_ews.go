@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +15,7 @@ func newSprayEWSCmd() *cobra.Command {
 	var (
 		hostname     string
 		ewsURL       string
+		domain       string
 		username     string
 		userList     string
 		password     string
@@ -48,6 +50,15 @@ Equivalent to the PowerShell Invoke-PasswordSprayEWS function.`,
 				users = []string{username}
 			} else {
 				return fmt.Errorf("provide --username or --user-list")
+			}
+
+			// Prepend domain prefix if --domain is set and username doesn't already have one.
+			if domain != "" {
+				for i, u := range users {
+					if !strings.Contains(u, `\`) && !strings.Contains(u, "@") {
+						users[i] = domain + `\` + u
+					}
+				}
 			}
 
 			// Build password list.
@@ -137,6 +148,7 @@ Equivalent to the PowerShell Invoke-PasswordSprayEWS function.`,
 	f := cmd.Flags()
 	f.StringVar(&hostname, "hostname", "", "Exchange server hostname")
 	f.StringVar(&ewsURL, "ews-url", "", "Full EWS URL (overrides --hostname)")
+	f.StringVar(&domain, "domain", "", "Prepend DOMAIN\\ to usernames that lack a domain prefix")
 	f.StringVar(&username, "username", "", "Single username to spray")
 	f.StringVar(&userList, "user-list", "", "File with usernames (one per line)")
 	f.StringVar(&password, "password", "", "Single password to spray")
