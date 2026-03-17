@@ -1,0 +1,4 @@
+/mailsniper
+results/
+*.csv
+*.log
