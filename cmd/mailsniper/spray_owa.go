@@ -22,6 +22,7 @@ func newSprayOWACmd() *cobra.Command {
 		outFmt       string
 		skipTLS      bool
 		delay        int
+		verbose      bool
 	)
 
 	cmd := &cobra.Command{
@@ -62,7 +63,9 @@ Equivalent to the PowerShell Invoke-PasswordSprayOWA function.`,
 
 			fmt.Printf("[*] Loaded %d user(s), %d password(s)\n", len(users), len(passwords))
 			fmt.Printf("[*] Spraying OWA at %s\n", hostname)
-			fmt.Printf("[*] Threads: %d | Delay: %dms\n", threads, delay)
+			if verbose {
+				fmt.Printf("[*] Threads: %d | Delay: %dms\n", threads, delay)
+			}
 
 			type result struct {
 				user     string
@@ -74,7 +77,9 @@ Equivalent to the PowerShell Invoke-PasswordSprayOWA function.`,
 			var allResults []output.SprayResult
 
 			for _, pwd := range passwords {
-				fmt.Printf("[*] Trying password: %s\n", pwd)
+				if verbose {
+					fmt.Printf("[*] Trying password: %s\n", pwd)
+				}
 
 				sem := make(chan struct{}, threads)
 				resultCh := make(chan result, len(users))
@@ -103,7 +108,7 @@ Equivalent to the PowerShell Invoke-PasswordSprayOWA function.`,
 				close(resultCh)
 
 				for r := range resultCh {
-					if r.err != nil {
+					if r.err != nil && verbose {
 						fmt.Printf("[-] %s: error: %v\n", r.user, r.err)
 					} else if r.valid {
 						fmt.Printf("[+] VALID: %s:%s\n", r.user, r.password)
@@ -137,6 +142,7 @@ Equivalent to the PowerShell Invoke-PasswordSprayOWA function.`,
 	f.StringVar(&outFmt, "output-format", "txt", "Output format: csv, json, txt")
 	f.BoolVar(&skipTLS, "skip-tls", false, "Skip TLS certificate verification")
 	f.IntVar(&delay, "delay", 0, "Delay between requests per thread (milliseconds)")
+	f.BoolVar(&verbose, "verbose", false, "Print each password attempt and errors")
 
 	_ = cmd.MarkFlagRequired("hostname")
 	return cmd

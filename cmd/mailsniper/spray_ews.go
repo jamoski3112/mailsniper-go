@@ -24,6 +24,7 @@ func newSprayEWSCmd() *cobra.Command {
 		outFmt       string
 		skipTLS      bool
 		delay        int
+		verbose      bool
 	)
 
 	cmd := &cobra.Command{
@@ -71,7 +72,9 @@ Equivalent to the PowerShell Invoke-PasswordSprayEWS function.`,
 
 			fmt.Printf("[*] Loaded %d user(s), %d password(s)\n", len(users), len(passwords))
 			fmt.Printf("[*] Spraying EWS at %s\n", ewsURL)
-			fmt.Printf("[*] Threads: %d | Delay: %dms\n", threads, delay)
+			if verbose {
+				fmt.Printf("[*] Threads: %d | Delay: %dms\n", threads, delay)
+			}
 
 			type result struct {
 				user     string
@@ -82,7 +85,9 @@ Equivalent to the PowerShell Invoke-PasswordSprayEWS function.`,
 			var allResults []output.SprayResult
 
 			for _, pwd := range passwords {
-				fmt.Printf("[*] Trying password: %s\n", pwd)
+				if verbose {
+					fmt.Printf("[*] Trying password: %s\n", pwd)
+				}
 
 				sem := make(chan struct{}, threads)
 				resultCh := make(chan result, len(users))
@@ -142,6 +147,7 @@ Equivalent to the PowerShell Invoke-PasswordSprayEWS function.`,
 	f.StringVar(&outFmt, "output-format", "txt", "Output format: csv, json, txt")
 	f.BoolVar(&skipTLS, "skip-tls", false, "Skip TLS certificate verification")
 	f.IntVar(&delay, "delay", 0, "Delay between requests per thread (milliseconds)")
+	f.BoolVar(&verbose, "verbose", false, "Print each password attempt")
 
 	return cmd
 }
